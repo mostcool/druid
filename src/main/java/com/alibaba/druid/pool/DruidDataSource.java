@@ -172,6 +172,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
     private volatile boolean                 keepAlive                 = false;
     private boolean                          asyncInit                 = false;
     protected boolean                        killWhenSocketReadTimeout = false;
+    protected boolean                        checkExecuteTime          = false;
 
     private static List<Filter>              autoFilters               = null;
     private boolean                          loadSpifilterSkip         = false;
@@ -524,6 +525,12 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             String property = System.getProperty("druid.load.spifilter.skip");
             if (property != null && !"false".equals(property)) {
                 loadSpifilterSkip = true;
+            }
+        }
+        {
+            String property = System.getProperty("druid.checkExecuteTime");
+            if (property != null && !"false".equals(property)) {
+                checkExecuteTime = true;
             }
         }
     }
@@ -1411,14 +1418,12 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                         LOG.debug("skip not validate connection.");
                     }
 
-                    Connection realConnection = poolableConnection.conn;
-                    discardConnection(realConnection);
+                    discardConnection(poolableConnection.holder);
                     continue;
                 }
             } else {
-                Connection realConnection = poolableConnection.conn;
                 if (poolableConnection.conn.isClosed()) {
-                    discardConnection(null); // 传入null，避免重复关闭
+                    discardConnection(poolableConnection.holder); // 传入null，避免重复关闭
                     continue;
                 }
 
@@ -1426,7 +1431,13 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                     final DruidConnectionHolder holder = poolableConnection.holder;
                     long currentTimeMillis             = System.currentTimeMillis();
                     long lastActiveTimeMillis          = holder.lastActiveTimeMillis;
+                    long lastExecTimeMillis            = holder.lastExecTimeMillis;
                     long lastKeepTimeMillis            = holder.lastKeepTimeMillis;
+
+                    if (checkExecuteTime
+                            && lastExecTimeMillis != lastActiveTimeMillis) {
+                        lastActiveTimeMillis = lastExecTimeMillis;
+                    }
 
                     if (lastKeepTimeMillis > lastActiveTimeMillis) {
                         lastActiveTimeMillis = lastKeepTimeMillis;
@@ -1449,7 +1460,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                                 LOG.debug("skip not validate connection.");
                             }
 
-                            discardConnection(realConnection);
+                            discardConnection(poolableConnection.holder);
                              continue;
                         }
                     }
@@ -1490,6 +1501,35 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
         try {
             activeCount--;
             discardCount++;
+
+            if (activeCount <= minIdle) {
+                emptySignal();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void discardConnection(DruidConnectionHolder holder) {
+        if (holder == null) {
+            return;
+        }
+
+        Connection conn = holder.getConnection();
+        if (conn != null) {
+            JdbcUtils.close(conn);
+        }
+
+        lock.lock();
+        try {
+            if (holder.discard) {
+                return;
+            }
+
+            activeCount--;
+            discardCount++;
+
+            holder.discard = true;
 
             if (activeCount <= minIdle) {
                 emptySignal();
@@ -1748,7 +1788,6 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
         lock.lock();
         try {
             if ((!conn.isClosed()) || !conn.isDisable()) {
-                holder.setDiscard(true);
                 conn.disable(error);
                 requireDiscard = true;
             }
@@ -1787,8 +1826,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 }
             }
 
-            this.discardConnection(holder.getConnection());
-            holder.setDiscard(true);
+            this.discardConnection(holder);
         }
 
         LOG.error("discard connection", error);
@@ -1861,7 +1899,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             }
 
             if (phyMaxUseCount > 0 && holder.useCount >= phyMaxUseCount) {
-                discardConnection(holder.conn);
+                discardConnection(holder);
                 return;
             }
 
@@ -1895,7 +1933,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             }
 
             if (!enable) {
-                discardConnection(holder.conn);
+                discardConnection(holder);
                 return;
             }
 
@@ -1905,7 +1943,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             if (phyTimeoutMillis > 0) {
                 long phyConnectTimeMillis = currentTimeMillis - holder.connectTimeMillis;
                 if (phyConnectTimeMillis > phyTimeoutMillis) {
-                    discardConnection(holder.conn);
+                    discardConnection(holder);
                     return;
                 }
             }
@@ -1929,7 +1967,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             holder.clearStatementCache();
 
             if (!holder.discard) {
-                this.discardConnection(physicalConnection);
+                discardConnection(holder);
                 holder.discard = true;
             }
 
@@ -3536,6 +3574,8 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
         dataMap.put("PhysicalCloseCount", this.getDestroyCount());
         dataMap.put("PhysicalConnectErrorCount", this.getCreateErrorCount());
 
+        dataMap.put("DiscardCount", this.getDiscardCount());
+
         dataMap.put("ExecuteCount", this.getExecuteCount());
         dataMap.put("ExecuteUpdateCount", this.getExecuteUpdateCount());
         dataMap.put("ExecuteQueryCount", this.getExecuteQueryCount());
@@ -3801,5 +3841,13 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
 
     public boolean isClosed() {
         return this.closed;
+    }
+
+    public boolean isCheckExecuteTime() {
+        return checkExecuteTime;
+    }
+
+    public void setCheckExecuteTime(boolean checkExecuteTime) {
+        this.checkExecuteTime = checkExecuteTime;
     }
 }
