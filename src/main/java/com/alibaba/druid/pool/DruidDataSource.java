@@ -845,6 +845,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
 
             if (JdbcConstants.MYSQL.equals(this.dbType)
                     || JdbcConstants.MARIADB.equals(this.dbType)
+                    || JdbcConstants.OCEANBASE.equals(this.dbType)
                     || JdbcConstants.ALIYUN_ADS.equals(this.dbType)) {
                 boolean cacheServerConfigurationSet = false;
                 if (this.connectProperties.containsKey("cacheServerConfiguration")) {
@@ -883,24 +884,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
 
             initFromSPIServiceLoader();
 
-            if (this.driver == null) {
-                if (this.driverClass == null || this.driverClass.isEmpty()) {
-                    this.driverClass = JdbcUtils.getDriverClassName(this.jdbcUrl);
-                }
-
-                if (MockDriver.class.getName().equals(driverClass)) {
-                    driver = MockDriver.instance;
-                } else {
-                    if (jdbcUrl == null && (driverClass == null || driverClass.length() == 0)) {
-                        throw new SQLException("url not set");
-                    }
-                    driver = JdbcUtils.createDriver(driverClassLoader, driverClass);
-                }
-            } else {
-                if (this.driverClass == null) {
-                    this.driverClass = driver.getClass().getName();
-                }
-            }
+            resolveDriver();
 
             initCheck();
 
@@ -1211,6 +1195,27 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
         }
 
         LOG.error(errorMessage + "validationQuery not set");
+    }
+
+    protected void resolveDriver() throws SQLException {
+        if (this.driver == null) {
+            if (this.driverClass == null || this.driverClass.isEmpty()) {
+                this.driverClass = JdbcUtils.getDriverClassName(this.jdbcUrl);
+            }
+
+            if (MockDriver.class.getName().equals(driverClass)) {
+                driver = MockDriver.instance;
+            } else {
+                if (jdbcUrl == null && (driverClass == null || driverClass.length() == 0)) {
+                    throw new SQLException("url not set");
+                }
+                driver = JdbcUtils.createDriver(driverClassLoader, driverClass);
+            }
+        } else {
+            if (this.driverClass == null) {
+                this.driverClass = driver.getClass().getName();
+            }
+        }
     }
 
     protected void initCheck() throws SQLException {
