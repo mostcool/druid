@@ -30,6 +30,7 @@ import com.alibaba.druid.sql.dialect.hive.stmt.HiveCreateTableStatement;
 import com.alibaba.druid.sql.dialect.mysql.ast.MySqlPrimaryKey;
 import com.alibaba.druid.sql.dialect.mysql.ast.expr.MySqlOrderingExpr;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.*;
+import com.alibaba.druid.sql.dialect.odps.ast.OdpsNewExpr;
 import com.alibaba.druid.sql.dialect.oracle.ast.OracleSegmentAttributes;
 import com.alibaba.druid.sql.dialect.oracle.ast.expr.OracleCursorExpr;
 import com.alibaba.druid.sql.dialect.oracle.ast.expr.OracleDatetimeExpr;
@@ -2998,7 +2999,7 @@ public class SQLASTOutputVisitor extends SQLASTVisitorAdapter implements Paramet
         }
 
         if (param instanceof Number //
-            || param instanceof Boolean) {
+            || param instanceof Boolean || param instanceof java.time.temporal.Temporal ) {
             print0(param.toString());
             return;
         }
@@ -3510,6 +3511,13 @@ public class SQLASTOutputVisitor extends SQLASTVisitorAdapter implements Paramet
 
     public boolean visit(SQLCreateTableStatement x) {
         printCreateTable(x, true);
+
+        SQLPartitionBy partitionBy = x.getPartitioning();
+        if (partitionBy != null) {
+            println();
+            print0(ucase ? "PARTITION BY " : "partition by ");
+            partitionBy.accept(this);
+        }
 
         List<SQLAssignItem> options = x.getTableOptions();
         if (options.size() > 0) {
@@ -5405,13 +5413,20 @@ public class SQLASTOutputVisitor extends SQLASTVisitorAdapter implements Paramet
     @Override
     public boolean visit(SQLAlterTableStatement x) {
         print0(ucase ? "ALTER TABLE " : "alter table ");
+
+        if (x.isIfExists()) {
+            print0(ucase ? "IF EXISTS " : "if exists ");
+        }
+
         printTableSourceExpr(x.getName());
         this.indentCount++;
         for (int i = 0; i < x.getItems().size(); ++i) {
             SQLAlterTableItem item = x.getItems().get(i);
             if (i != 0) {
                 SQLAlterTableItem former = x.getItems().get(i - 1);
-                if (this.dbType == DbType.hive && former instanceof SQLAlterTableAddPartition && item instanceof SQLAlterTableAddPartition) {
+                if (this.dbType == DbType.hive
+                        && former instanceof SQLAlterTableAddPartition
+                        && item instanceof SQLAlterTableAddPartition) {
                     // ignore comma
                 } else {
                     print(',');
@@ -9033,6 +9048,34 @@ public class SQLASTOutputVisitor extends SQLASTVisitorAdapter implements Paramet
         return false;
     }
 
+    public boolean visit(SQLAlterTableMergePartition x) {
+        print0(ucase ? "MERGE " : "merge ");
+        if (x.isIfExists()) {
+            print0(ucase ? "IF EXISTS " : "if exists ");
+        }
+        println();
+        printlnAndAccept(x.getPartitions(), ", ");
+        println();
+        print0(ucase ? "OVERWRITE" : "overwrite");
+        println();
+        x.getOverwritePartition().accept(this);
+        return false;
+    }
+
+    public boolean visit(SQLPartitionSpec x) {
+        print0(ucase ? "PARTITION (" : "partition (");
+        printAndAccept(x.getItems(), ", ");
+        print(')');
+        return false;
+    }
+
+    public boolean visit(SQLPartitionSpec.Item x) {
+        x.getColumn().accept(this);
+        print0(" = ");
+        x.getValue().accept(this);
+        return false;
+    }
+
     public boolean visit(SQLAlterTableSubpartitionAvailablePartitionNum x) {
         print0(ucase ? "SUBPARTITION_AVAILABLE_PARTITION_NUM = " : "subpartition_available_partition_num = ");
         x.getNumber().accept(this);
@@ -10953,6 +10996,11 @@ public class SQLASTOutputVisitor extends SQLASTVisitorAdapter implements Paramet
 
         printAndAccept(x.getThreadIds(), ", ");
         return false;
+    }
+
+    public boolean visit(OdpsNewExpr x) {
+        print0(ucase ? "NEW " : "new ");
+        return super.visit((SQLMethodInvokeExpr) x);
     }
 
     public char getNameQuote() {

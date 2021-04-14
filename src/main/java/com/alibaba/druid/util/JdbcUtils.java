@@ -240,7 +240,7 @@ public final class JdbcUtils implements JdbcConstants {
                     } else {
                         out.print(Long.toString(value));
                     }
-                } else if (type == Types.TIMESTAMP) {
+                } else if (type == Types.TIMESTAMP || type == Types.TIMESTAMP_WITH_TIMEZONE) {
                     out.print(String.valueOf(rs.getTimestamp(columnIndex)));
                 } else if (type == Types.DECIMAL) {
                     out.print(String.valueOf(rs.getBigDecimal(columnIndex)));
@@ -379,6 +379,9 @@ public final class JdbcUtils implements JdbcConstants {
             case Types.TIMESTAMP:
                 return "TIMESTAMP";
 
+            case Types.TIMESTAMP_WITH_TIMEZONE:
+                return "TIMESTAMP_WITH_TIMEZONE";
+
             case Types.TINYINT:
                 return "TINYINT";
 
@@ -490,8 +493,10 @@ public final class JdbcUtils implements JdbcConstants {
             return "com.mimer.jdbc.Driver";
         } else if (rawUrl.startsWith("jdbc:dm:")) {
             return JdbcConstants.DM_DRIVER;
-        } else if (rawUrl.startsWith("jdbc:kingbase:") || rawUrl.startsWith("jdbc:kingbase8:")) {
+        } else if (rawUrl.startsWith("jdbc:kingbase:")) {
             return JdbcConstants.KINGBASE_DRIVER;
+        } else if (rawUrl.startsWith("jdbc:kingbase8:")) {
+            return JdbcConstants.KINGBASE8_DRIVER;
         } else if (rawUrl.startsWith("jdbc:gbase:")) {
             return JdbcConstants.GBASE_DRIVER;
         } else if (rawUrl.startsWith("jdbc:xugu:")) {
@@ -512,6 +517,8 @@ public final class JdbcUtils implements JdbcConstants {
             return JdbcConstants.CLICKHOUSE_DRIVER;
         } else if(rawUrl.startsWith("jdbc:presto:")) {
             return JdbcConstants.PRESTO_DRIVER;
+        } else if(rawUrl.startsWith("jdbc:trino:")) {
+            return JdbcConstants.TRINO_DRIVER;
         } else if (rawUrl.startsWith("jdbc:inspur:")) {
             return JdbcConstants.KDB_DRIVER;
         } else if (rawUrl.startsWith("jdbc:polardb")) {

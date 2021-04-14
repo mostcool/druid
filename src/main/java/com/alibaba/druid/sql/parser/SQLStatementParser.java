@@ -1214,7 +1214,8 @@ public class SQLStatementParser extends SQLParser {
     }
 
     public SQLStatement parseCommit() {
-        throw new ParserException("TODO " + lexer.info());
+        acceptIdentifier("COMMIT");
+        return new SQLCommitStatement();
     }
 
     public SQLStatement parseShow() {
@@ -1763,6 +1764,13 @@ public class SQLStatementParser extends SQLParser {
             lexer.nextToken();
 
             SQLAlterTableStatement stmt = new SQLAlterTableStatement(getDbType());
+
+            if (lexer.token == Token.IF) {
+                lexer.nextToken();
+                accept(Token.EXISTS);
+                stmt.setIfExists(true);
+            }
+
             stmt.setName(this.exprParser.name());
 
             for (;;) {
@@ -1791,6 +1799,13 @@ public class SQLStatementParser extends SQLParser {
                     } else if (lexer.token == Token.IDENTIFIER) {
                         SQLAlterTableAddColumn item = parseAlterTableAddColumn();
                         stmt.addItem(item);
+                    } else if (lexer.token == LPAREN) {
+                        if (dbType == DbType.h2) {
+                            lexer.nextToken();
+                            SQLAlterTableAddColumn item = parseAlterTableAddColumn();
+                            stmt.addItem(item);
+                            accept(RPAREN);
+                        }
                     } else if (lexer.token == Token.COLUMN) {
                         lexer.nextToken();
                         SQLAlterTableAddColumn item = parseAlterTableAddColumn();
@@ -1887,6 +1902,13 @@ public class SQLStatementParser extends SQLParser {
                     if (lexer.token == Token.COLUMN) {
                         SQLAlterTableAlterColumn alterColumn = parseAlterColumn();
                         stmt.addItem(alterColumn);
+
+                        if (dbType == DbType.postgresql) {
+                            if (lexer.token == Token.COMMA) {
+                                lexer.nextToken();
+                                continue;
+                            }
+                        }
                     } else if (lexer.token == Token.LITERAL_ALIAS) {
                         SQLAlterTableAlterColumn alterColumn = parseAlterColumn();
                         stmt.addItem(alterColumn);
@@ -2176,8 +2198,41 @@ public class SQLStatementParser extends SQLParser {
                     stmt.addItem(item);
                 } else if (DbType.odps == dbType && lexer.identifierEquals("MERGE")) {
                     lexer.nextToken();
-                    acceptIdentifier("SMALLFILES");
-                    stmt.setMergeSmallFiles(true);
+
+                    boolean ifExists = false;
+                    if (lexer.token == Token.IF) {
+                        lexer.nextToken();
+                        accept(Token.EXISTS);
+                        ifExists = true;
+                    }
+
+                    if (lexer.token == PARTITION) {
+                        SQLAlterTableMergePartition item = new SQLAlterTableMergePartition();
+                        for (;;) {
+                            item.addPartition(
+                                    this.getExprParser().parsePartitionSpec()
+                            );
+                            if (lexer.token == COMMA) {
+                                lexer.nextToken();
+                            } else {
+                                break;
+                            }
+                        }
+
+                        accept(OVERWRITE);
+                        item.setOverwritePartition(
+                                this.getExprParser().parsePartitionSpec()
+                        );
+
+                        if (ifExists) {
+                            item.setIfExists(true);
+                        }
+
+                        stmt.addItem(item);
+                    } else {
+                        acceptIdentifier("SMALLFILES");
+                        stmt.setMergeSmallFiles(true);
+                    }
                 } else if (DbType.odps == dbType && lexer.identifierEquals(FnvHash.Constants.CLUSTERED)) {
                     lexer.nextToken();
                     accept(Token.BY);
@@ -2340,7 +2395,13 @@ public class SQLStatementParser extends SQLParser {
         } else if (lexer.token == Token.COLUMN) {
             lexer.nextToken();
             SQLAlterTableDropColumnItem item = new SQLAlterTableDropColumnItem();
-            this.exprParser.names(item.getColumns());
+
+            if (dbType == DbType.postgresql) {
+                item.getColumns().add(
+                        this.exprParser.name());
+            } else {
+                this.exprParser.names(item.getColumns());
+            }
 
             if (lexer.token == Token.CASCADE) {
                 item.setCascade(true);
@@ -2348,6 +2409,12 @@ public class SQLStatementParser extends SQLParser {
             }
 
             stmt.addItem(item);
+
+            if (dbType == DbType.postgresql) {
+                if (lexer.token == Token.COMMA) {
+                    lexer.nextToken();
+                }
+            }
         } else if (lexer.token == Token.LITERAL_ALIAS) {
             SQLAlterTableDropColumnItem item = new SQLAlterTableDropColumnItem();
             this.exprParser.names(item.getColumns());
@@ -5829,6 +5896,9 @@ public class SQLStatementParser extends SQLParser {
         for (int i = 0; ; ++i) {
             int startPos = lexer.pos - 1;
 
+            if (lexer.token == Token.ROW) {
+                lexer.nextToken();
+            }
             if (lexer.token != Token.LPAREN) {
                 throw new ParserException("syntax error, expect ')', " + lexer.info());
             }
@@ -6620,6 +6690,13 @@ public class SQLStatementParser extends SQLParser {
             SQLExpr tableExpr = this.exprParser.expr();
             stmt.setTable(tableExpr);
         }
+
+        if (lexer.identifierEquals(FnvHash.Constants.ADD)) {
+            lexer.nextToken();
+            acceptIdentifier("PARTITIONS");
+            stmt.setAddPartitions(true);
+        }
+
         return stmt;
     }
 
