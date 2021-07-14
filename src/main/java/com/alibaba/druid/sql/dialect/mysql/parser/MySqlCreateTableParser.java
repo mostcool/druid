@@ -348,6 +348,10 @@ public class MySqlCreateTableParser extends SQLCreateTableParser {
                         stmt.getTableElementList().add(column);
                     }
 
+                    if (lexer.token() == Token.HINT) {
+                        lexer.nextToken();
+                    }
+
                     if (lexer.token() != Token.COMMA) {
                         break;
                     } else {
@@ -357,6 +361,10 @@ public class MySqlCreateTableParser extends SQLCreateTableParser {
                         }
                     }
                 }
+            }
+
+            if (lexer.token() == Token.HINT) {
+                lexer.nextToken();
             }
 
             accept(Token.RPAREN);
@@ -384,7 +392,7 @@ public class MySqlCreateTableParser extends SQLCreateTableParser {
                 } else {
                     expr = this.exprParser.expr();
                 }
-                stmt.addOption("ENGINE", expr);
+                stmt.setEngine(expr);
                 continue;
             }
 
@@ -402,6 +410,17 @@ public class MySqlCreateTableParser extends SQLCreateTableParser {
                     expr = this.exprParser.integerExpr();
                 }
                 stmt.addOption("BLOCK_SIZE", expr);
+                continue;
+            }
+
+            if (lexer.identifierEquals("BLOCK_FORMAT")) {
+                lexer.nextToken();
+                if (lexer.token() == Token.EQ) {
+                    lexer.nextToken();
+                }
+
+                SQLExpr expr = this.exprParser.primary();
+                stmt.addOption("BLOCK_FORMAT", expr);
                 continue;
             }
 

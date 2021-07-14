@@ -57,6 +57,18 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
     }
 
     public boolean visit(OdpsCreateTableStatement x) {
+        List<SQLCommentHint> headHints = x.getHeadHintsDirect();
+        if (headHints != null) {
+            for (SQLCommentHint hint : headHints) {
+                visit((SQLCommentHint) hint);
+                println();
+            }
+        }
+
+        if (x.hasBeforeComment()) {
+            printlnComments(x.getBeforeCommentsDirect());
+        }
+
         print0(ucase ? "CREATE " : "create ");
 
         if (x.isExternal()) {
@@ -278,7 +290,13 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
 
     @Override
     public boolean visit(SQLJoinTableSource x) {
-        x.getLeft().accept(this);
+        SQLTableSource left = x.getLeft();
+        left.accept(this);
+
+        if (left.hasAfterComment() && isPrettyFormat()) {
+            println();
+            printlnComment(left.getAfterCommentsDirect());
+        }
 
         if (x.getJoinType() == JoinType.COMMA) {
             print(',');
@@ -453,6 +471,12 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
             x.getOrderBy().accept(this);
         }
 
+        SQLZOrderBy zorderBy = x.getZOrderBy();
+        if (zorderBy != null) {
+            println();
+            zorderBy.accept(this);
+        }
+
         final List<SQLSelectOrderByItem> distributeBy = x.getDistributeByDirect();
         if (distributeBy.size() > 0) {
             println();
@@ -486,6 +510,23 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
         int itemSize = x.getItems().size();
         if (itemSize > 0) {
             print0(ucase ? "ORDER BY " : "order by ");
+            this.indentCount++;
+            for (int i = 0; i < itemSize; ++i) {
+                if (i != 0) {
+                    println(", ");
+                }
+                x.getItems().get(i).accept(this);
+            }
+            this.indentCount--;
+        }
+
+        return false;
+    }
+
+    public boolean visit(SQLZOrderBy x) {
+        int itemSize = x.getItems().size();
+        if (itemSize > 0) {
+            print0(ucase ? "ZORDER BY " : "zorder by ");
             this.indentCount++;
             for (int i = 0; i < itemSize; ++i) {
                 if (i != 0) {
@@ -569,6 +610,18 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
 
     @Override
     public boolean visit(OdpsReadStatement x) {
+        List<SQLCommentHint> headHints = x.getHeadHintsDirect();
+        if (headHints != null) {
+            for (SQLCommentHint hint : headHints) {
+                visit((SQLCommentHint) hint);
+                println();
+            }
+        }
+
+        if (x.hasBeforeComment()) {
+            printlnComments(x.getBeforeCommentsDirect());
+        }
+
         print0(ucase ? "READ " : "read ");
         x.getTable().accept(this);
 
@@ -615,7 +668,12 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
 
     public boolean visit(SQLDataType x) {
         String dataTypeName = x.getName();
-        print0(ucase ? dataTypeName.toUpperCase() : dataTypeName.toLowerCase());
+        if (dataTypeName.indexOf('<') != -1 || dataTypeName.equals("Object")) {
+            print0(dataTypeName);
+        } else {
+            print0(ucase ? dataTypeName.toUpperCase() : dataTypeName.toLowerCase());
+        }
+
         if (x.getArguments().size() > 0) {
             print('(');
             printAndAccept(x.getArguments(), ", ");
@@ -636,6 +694,18 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
 
     @Override
     public boolean visit(OdpsShowGrantsStmt x) {
+        List<SQLCommentHint> headHints = x.getHeadHintsDirect();
+        if (headHints != null) {
+            for (SQLCommentHint hint : headHints) {
+                visit((SQLCommentHint) hint);
+                println();
+            }
+        }
+
+        if (x.hasBeforeComment()) {
+            printlnComments(x.getBeforeCommentsDirect());
+        }
+
         if (x.isLabel()) {
             print0(ucase ? "SHOW LABEL GRANTS" : "show label grants");
 
@@ -785,6 +855,18 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
             print0(" -f");
         }
 
+        SQLName toPackage = x.getToPackage();
+        if (toPackage != null) {
+            print0(ucase ? " TO PACKAGE " : " to package ");
+            printExpr(toPackage);
+
+            List<SQLPrivilegeItem> privileges = x.getPrivileges();
+            if (!privileges.isEmpty()) {
+                print0(ucase ? " WITH PRIVILEGES " : " with privileges ");
+                printAndAccept(privileges, ", ");
+            }
+        }
+
         return false;
     }
 
@@ -852,6 +934,18 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
 
     @Override
     public boolean visit(OdpsCountStatement x) {
+        List<SQLCommentHint> headHints = x.getHeadHintsDirect();
+        if (headHints != null) {
+            for (SQLCommentHint hint : headHints) {
+                visit((SQLCommentHint) hint);
+                println();
+            }
+        }
+
+        if (x.hasBeforeComment()) {
+            printlnComments(x.getBeforeCommentsDirect());
+        }
+
         print0(ucase ? "COUNT " : "count ");
         x.getTable().accept(this);
 
@@ -892,12 +986,19 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
             printAndAccept(resources, ", ");
         }
 
-        List<SQLExpr> outputColumns = x.getOutputColumns();
+        List<SQLColumnDefinition> outputColumns = x.getOutputColumns();
         if (!outputColumns.isEmpty()) {
             println();
             print0(ucase ? "AS (" : "as (");
-            printAndAccept(resources, ", ");
+            printAndAccept(outputColumns, ", ");
             print(')');
+        }
+
+        SQLExternalRecordFormat inputRowFormat = x.getInputRowFormat();
+        if (inputRowFormat != null) {
+            println();
+            print0(ucase ? "ROW FORMAT DELIMITED" : "row format delimited");
+            inputRowFormat.accept(this);
         }
 
         return false;
@@ -966,6 +1067,12 @@ public class OdpsOutputVisitor extends HiveOutputVisitor implements OdpsASTVisit
     public boolean visit(OdpsNewExpr x) {
         print0("new ");
         super.visit((SQLMethodInvokeExpr) x);
+        return false;
+    }
+
+    public boolean visit(OdpsInstallPackageStatement x) {
+        print0(ucase ? "INSTALL PACKAGE " : "install package ");
+        printExpr(x.getPackageName());
         return false;
     }
 }

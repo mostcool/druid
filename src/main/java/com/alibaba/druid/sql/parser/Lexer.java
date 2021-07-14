@@ -568,6 +568,12 @@ public class Lexer {
             return;
         }
 
+        if (ch == '（') {
+            scanChar();
+            token = Token.LPAREN;
+            return;
+        }
+
         if (ch == '$' && isVaraintChar(charAt(pos + 1))) {
             scanVariable();
             return;
@@ -675,16 +681,32 @@ public class Lexer {
                 ch = charAt(++pos);
             }
 
-            if (ch == '/' && pos + 1 < text.length() && text.charAt(pos + 1) == '*') {
-                int index = text.indexOf("*/", pos + 2);
-                if (index == -1) {
-                    return SQLType.UNKNOWN;
-                }
+            if (ch == '/') {
+                if (pos + 1 < text.length() && text.charAt(pos + 1) == '*') {
+                    int index = text.indexOf("*/", pos + 2);
+                    if (index == -1) {
+                        return SQLType.UNKNOWN;
+                    }
 
-                pos = index + 2;
-                ch = charAt(pos);
-                continue;
+                    pos = index + 2;
+                    ch = charAt(pos);
+                    continue;
+                } else if (pos + 2 < text.length()
+                        && text.charAt(pos + 1) == ' '
+                        && text.charAt(pos + 2) == '*'
+                        && dbType == DbType.odps
+                ) {
+                    int index = text.indexOf("* /", pos + 3);
+                    if (index == -1) {
+                        return SQLType.UNKNOWN;
+                    }
+
+                    pos = index + 3;
+                    ch = charAt(pos);
+                    continue;
+                }
             }
+
 
             if (ch == '-' && pos + 1 < text.length() && text.charAt(pos + 1) == '-') {
                 int index = text.indexOf('\n', pos + 2);
@@ -797,12 +819,21 @@ public class Lexer {
             nextToken();
             if (token == Token.USER || identifierEquals(FnvHash.Constants.USER)) {
                 return SQLType.ADD_USER;
+            } else if (token == TABLE) {
+                return SQLType.ADD_TABLE;
             }
         } else if (hashCode == FnvHash.Constants.REMOVE) {
             nextToken();
             if (token == Token.USER || identifierEquals(FnvHash.Constants.USER)) {
                 return SQLType.REMOVE_USER;
             }
+        } else if (hashCode == FnvHash.Constants.TUNNEL) {
+            nextToken();
+            if (identifierEquals(FnvHash.Constants.DOWNLOAD)) {
+                return SQLType.TUNNEL_DOWNLOAD;
+            }
+        } else if (hashCode == FnvHash.Constants.UPLOAD) {
+            return SQLType.UPLOAD;
         }
 
         return SQLType.UNKNOWN;
@@ -811,7 +842,6 @@ public class Lexer {
     public final SQLType scanSQLTypeV2() {
 
         SQLType sqlType = scanSQLType();
-
         if (sqlType == SQLType.CREATE) {
             nextToken();
             if (token == Token.USER || identifierEquals(FnvHash.Constants.USER)) {
@@ -869,6 +899,19 @@ public class Lexer {
             } else if (token == TABLE) {
                 return SQLType.ALTER_TABLE;
             }
+        } else if (sqlType == SQLType.INSERT) {
+            for (int i = 0; i < 1000;++i) {
+                nextToken();
+
+                if (token == SELECT) {
+                    return SQLType.INSERT_SELECT;
+                } else if (token == VALUES) {
+                    return SQLType.INSERT_VALUES;
+                } else if (token == ERROR || token == EOF) {
+                    break;
+                }
+            }
+            return sqlType;
         }
 
         return sqlType;
@@ -1155,6 +1198,12 @@ public class Lexer {
                             continue;
                         }
                     } else if (nextChar == ' ' && charAt(pos + 2) == '*') {
+                        scanComment();
+                        if ((token == Token.LINE_COMMENT || token == Token.MULTI_LINE_COMMENT) && skipComment) {
+                            bufPos = 0;
+                            continue;
+                        }
+                    } else if (nextChar == ' ' && charAt(pos + 2) == ' ' && charAt(pos + 3) == '*') {
                         scanComment();
                         if ((token == Token.LINE_COMMENT || token == Token.MULTI_LINE_COMMENT) && skipComment) {
                             bufPos = 0;
@@ -2070,6 +2119,12 @@ public class Lexer {
             mark = pos;
             bufPos = 0;
             scanChar();
+
+            if (dbType == DbType.odps && ch == ' ') {
+                mark = pos;
+                bufPos = 0;
+                scanChar();
+            }
         }
 
         // /*+ */
@@ -2093,9 +2148,16 @@ public class Lexer {
             for (;;) {
                 char c2;
                 if (ch == '*'
-                        && ((c2 = charAt(pos + 1)) == '/' || (c2 == ' ' && charAt(pos + 2) == '/'))
+                        && ((c2 = charAt(pos + 1)) == '/'
+                            || (c2 == ' ' && charAt(pos + 2) == '/')
+                            || (c2 == ' ' && charAt(pos + 2) == ' ' && charAt(pos + 3) == '/'))
                 ) {
                     if (c2 == ' ') {
+                        bufPos ++;
+                        scanChar();
+                    }
+
+                    if (charAt(pos + 1) == ' ') {
                         bufPos ++;
                         scanChar();
                     }

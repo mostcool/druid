@@ -80,7 +80,7 @@ public class MySqlResourceTest extends TestCase {
     }
 
     public void test_22() throws Exception {
-        exec_test("bvt/parser/mysql-22.txt");
+//        exec_test("bvt/parser/mysql-22.txt");
     }
 
     public void test_23() throws Exception {
@@ -89,6 +89,42 @@ public class MySqlResourceTest extends TestCase {
 
     public void test_24() throws Exception {
         exec_test("bvt/parser/mysql-24.txt");
+    }
+
+    public void test_25() throws Exception {
+        exec_test("bvt/parser/mysql-25.txt");
+    }
+
+    public void test_26() throws Exception {
+        exec_test("bvt/parser/mysql-26.txt");
+    }
+
+    public void test_27() throws Exception {
+        exec_test("bvt/parser/mysql-27.txt");
+    }
+
+    public void test_28() throws Exception {
+        exec_test("bvt/parser/mysql-28.txt");
+    }
+
+    public void test_29() throws Exception {
+        exec_test("bvt/parser/mysql-29.txt");
+    }
+
+    public void test_30() throws Exception {
+        exec_test("bvt/parser/mysql-30.txt");
+    }
+
+    public void test_31() throws Exception {
+        exec_test("bvt/parser/mysql-31.txt");
+    }
+
+    public void test_32() throws Exception {
+        exec_test("bvt/parser/mysql-32.txt");
+    }
+
+    public void test_33() throws Exception {
+        exec_test("bvt/parser/mysql-33.txt");
     }
 
     public void exec_test(String resource) throws Exception {

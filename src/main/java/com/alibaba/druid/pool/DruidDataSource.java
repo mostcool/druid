@@ -570,6 +570,10 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
     }
 
     public void restart() throws SQLException {
+        this.restart(null);
+    }
+
+    public void restart(Properties properties) throws SQLException {
         lock.lock();
         try {
             if (activeCount > 0) {
@@ -584,6 +588,10 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             this.inited = false;
             this.enable = true;
             this.closed = false;
+
+            if (properties != null) {
+                configFromPropety(properties);
+            }
         } finally {
             lock.unlock();
         }
@@ -868,6 +876,10 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
 
             if (maxEvictableIdleTimeMillis < minEvictableIdleTimeMillis) {
                 throw new SQLException("maxEvictableIdleTimeMillis must be grater than minEvictableIdleTimeMillis");
+            }
+
+            if (keepAlive && keepAliveBetweenTimeMillis <= timeBetweenEvictionRunsMillis) {
+                throw new SQLException("keepAliveBetweenTimeMillis must be grater than timeBetweenEvictionRunsMillis");
             }
 
             if (this.driverClass != null) {
@@ -2104,6 +2116,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 filter.destroy();
             }
         } finally {
+            this.closing = false;
             lock.unlock();
         }
 
@@ -2503,7 +2516,11 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
     private boolean put(DruidConnectionHolder holder, long createTaskId) {
         lock.lock();
         try {
-            if (poolingCount >= maxActive || this.closed) {
+            if (this.closing || this.closed) {
+                return false;
+            }
+
+            if (poolingCount >= maxActive) {
                 if (createScheduler != null) {
                     clearCreateTask(createTaskId);
                 }
@@ -2778,7 +2795,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                     lastCreateError = e;
                     lastErrorTimeMillis = System.currentTimeMillis();
 
-                    if (!closing) {
+                    if ((!closing) && (!closed)) {
                         LOG.error("create connection Thread Interrupted, url: " + jdbcUrl, e);
                     }
                     break;
@@ -2859,7 +2876,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             for (;;) {
                 // 从前面开始删除
                 try {
-                    if (closed) {
+                    if (closed || closing) {
                         break;
                     }
 

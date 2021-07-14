@@ -118,13 +118,21 @@ public class MySqlOutputVisitor extends SQLASTOutputVisitor implements MySqlASTV
                 print(' ');
             }
 
-            final int distionOption = x.getDistionOption();
-            if (SQLSetQuantifier.ALL == distionOption) {
-                print0(ucase ? "ALL " : "all ");
-            } else if (SQLSetQuantifier.DISTINCT == distionOption) {
-                print0(ucase ? "DISTINCT " : "distinct ");
-            } else if (SQLSetQuantifier.DISTINCTROW == distionOption) {
-                print0(ucase ? "DISTINCTROW " : "distinctrow ");
+            switch (x.getDistionOption()) {
+                case SQLSetQuantifier.ALL:
+                    print0(ucase ? "ALL " : "all ");
+                    break;
+                case SQLSetQuantifier.DISTINCT:
+                    print0(ucase ? "DISTINCT " : "distinct ");
+                    break;
+                case SQLSetQuantifier.DISTINCTROW:
+                    print0(ucase ? "DISTINCTROW " : "distinctrow ");
+                    break;
+                case SQLSetQuantifier.UNIQUE:
+                    print0(ucase ? "UNIQUE " : "unique ");
+                    break;
+                default:
+                    break;
             }
 
             if (x.isHignPriority()) {
@@ -693,7 +701,17 @@ public class MySqlOutputVisitor extends SQLASTOutputVisitor implements MySqlASTV
         }
         print(')');
 
+        SQLIndexDefinition indexDefinition = x.getIndexDefinition();
+        if (indexDefinition.hasOptions()) {
+            indexDefinition.getOptions().accept(this);
+        }
+
         SQLExpr comment = x.getComment();
+        if (indexDefinition.hasOptions()
+                && indexDefinition.getOptions().getComment() == comment) {
+            comment = null;
+        }
+
         if (comment != null) {
             print0(ucase ? " COMMENT " : " comment ");
             printExpr(comment);
@@ -1008,6 +1026,10 @@ public class MySqlOutputVisitor extends SQLASTOutputVisitor implements MySqlASTV
             }
         }
 
+        if (this.isPrettyFormat() && x.hasBeforeComment()) {
+            this.printlnComments(x.getBeforeCommentsDirect());
+        }
+
         print0(ucase ? "DELETE " : "delete ");
 
         for (int i = 0, size = x.getHintsSize(); i < size; ++i) {
@@ -1091,6 +1113,10 @@ public class MySqlOutputVisitor extends SQLASTOutputVisitor implements MySqlASTV
                 hint.accept(this);
                 println();
             }
+        }
+
+        if (this.isPrettyFormat() && x.hasBeforeComment()) {
+            this.printlnComments(x.getBeforeCommentsDirect());
         }
 
         SQLWithSubqueryClause with = x.getWith();
@@ -2208,6 +2234,11 @@ public class MySqlOutputVisitor extends SQLASTOutputVisitor implements MySqlASTV
                 hint.accept(this);
                 println();
             }
+        }
+
+        if (x.getWith() != null) {
+            x.getWith().accept(this);
+            println();
         }
 
         List<SQLExpr> returning = x.getReturning();
@@ -5256,7 +5287,7 @@ public class MySqlOutputVisitor extends SQLASTOutputVisitor implements MySqlASTV
 
     @Override
     public boolean visit(MySqlAlterServerStatement x) {
-        print0(ucase ? "ATLER SERVER " : "alter server ");
+        print0(ucase ? "ALTER SERVER " : "alter server ");
         x.getName().accept(this);
 
         print(" OPTIONS(");

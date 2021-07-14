@@ -911,6 +911,12 @@ public class SQLStatementParser extends SQLParser {
 
         accept(Token.VIEW);
 
+        if (lexer.token == Token.IF) {
+            lexer.nextToken();
+            accept(Token.EXISTS);
+            stmt.setIfExists(true);
+        }
+
         stmt.setName(this.exprParser.name());
         return stmt;
     }
@@ -1124,6 +1130,16 @@ public class SQLStatementParser extends SQLParser {
         if (lexer.identifierEquals(FnvHash.Constants.RECYCLEBIN)) {
             lexer.nextToken();
             SQLPurgeRecyclebinStatement stmt = new SQLPurgeRecyclebinStatement();
+            return stmt;
+        }
+
+
+        if (lexer.identifierEquals("TEMPORARY")) {
+            lexer.nextToken();
+            acceptIdentifier("OUTPUT");
+            SQLPurgeTemporaryOutputStatement stmt = new SQLPurgeTemporaryOutputStatement();
+            stmt.setName(
+                    this.exprParser.name());
             return stmt;
         }
 
@@ -2051,6 +2067,11 @@ public class SQLStatementParser extends SQLParser {
                         SQLAlterTableSetLifecycle setLifecycle = new SQLAlterTableSetLifecycle();
                         setLifecycle.setLifecycle(this.exprParser.primary());
                         stmt.addItem(setLifecycle);
+                    } else if (lexer.identifierEquals(Constants.LOCATION)) {
+                        lexer.nextToken();
+                        SQLAlterTableSetLocation setLocation = new SQLAlterTableSetLocation();
+                        setLocation.setLocation(this.exprParser.primary());
+                        stmt.addItem(setLocation);
                     } else if (lexer.identifierEquals(FnvHash.Constants.TBLPROPERTIES)) {
                         lexer.nextToken();
                         SQLAlterTableSetOption setOption = new SQLAlterTableSetOption();
@@ -3575,6 +3596,7 @@ public class SQLStatementParser extends SQLParser {
                             if (name != null) {
                                 key.setName(name);
                             }
+                            key.setParent(stmt);
                             stmt.getTableElementList().add(key);
                         }
                         continue;
@@ -3947,9 +3969,7 @@ public class SQLStatementParser extends SQLParser {
             accept(Token.DATABASE);
         }
 
-
-
-        if (lexer.token == Token.IF) {
+        if (lexer.token == Token.IF || lexer.identifierEquals("IF")) {
             lexer.nextToken();
             accept(Token.NOT);
             accept(Token.EXISTS);
@@ -4332,10 +4352,11 @@ public class SQLStatementParser extends SQLParser {
             lexer.nextToken();
 
             for (;;) {
-
                 if (lexer.token == Token.CONSTRAINT) {
                     SQLTableConstraint constraint = (SQLTableConstraint) this.exprParser.parseConstaint();
                     createView.addColumn(constraint);
+                } else if (lexer.token == Token.RPAREN) {
+                    break;
                 } else {
                     SQLColumnDefinition column = new SQLColumnDefinition();
                     column.setDbType(dbType);
@@ -5253,6 +5274,10 @@ public class SQLStatementParser extends SQLParser {
             HiveMultiInsertStatement insert = (HiveMultiInsertStatement) this.parseInsert();
             insert.setWith(with);
             return insert;
+        } else if (lexer.token == UPDATE) {
+            SQLUpdateStatement update = this.parseUpdateStatement();
+            update.setWith(with);
+            return update;
         }
 
         throw new ParserException("TODO. " + lexer.info());

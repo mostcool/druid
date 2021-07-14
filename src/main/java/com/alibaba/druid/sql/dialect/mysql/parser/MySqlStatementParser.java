@@ -141,6 +141,14 @@ public class MySqlStatementParser extends SQLStatementParser {
     public MySqlDeleteStatement parseDeleteStatement() {
         MySqlDeleteStatement deleteStatement = new MySqlDeleteStatement();
 
+        if (lexer.isKeepComments() && lexer.hasComment()) {
+            List<String> comments = lexer.readAndResetComments();
+
+            if (comments != null) {
+                deleteStatement.addBeforeComment(comments);
+            }
+        }
+
         if (lexer.token() == Token.DELETE) {
             lexer.nextToken();
 
@@ -5123,6 +5131,11 @@ public class MySqlStatementParser extends SQLStatementParser {
 
 
     public SQLStatement parseAlter() {
+        List<String> comments = null;
+        if (lexer.isKeepComments() && lexer.hasComment()) {
+            comments = lexer.readAndResetComments();
+        }
+
         Lexer.SavePoint mark = lexer.mark();
         accept(Token.ALTER);
 
@@ -5150,7 +5163,12 @@ public class MySqlStatementParser extends SQLStatementParser {
         }
 
         if (lexer.token() == Token.TABLE) {
-            return parseAlterTable(ignore, online, offline);
+            SQLStatement alterTable = parseAlterTable(ignore, online, offline);
+            if (comments != null) {
+                alterTable.addBeforeComment(comments);
+            }
+
+            return alterTable;
         }
 
         if (lexer.token() == Token.DATABASE
@@ -6513,8 +6531,19 @@ public class MySqlStatementParser extends SQLStatementParser {
                 if (lexer.token() == Token.INDEX) {
                     // Caution: Not in MySql documents.
                     lexer.nextToken();
-                    MySqlAlterTableAlterFullTextIndex alterIndex = new MySqlAlterTableAlterFullTextIndex();
+
                     SQLName indexName = this.exprParser.name();
+
+                    if (lexer.identifierEquals("VISIBLE")) {
+                        SQLAlterTableAlterIndex alterIndex = new SQLAlterTableAlterIndex();
+                        alterIndex.setName(indexName);
+                        lexer.nextToken();
+                        alterIndex.getIndexDefinition().getOptions().setVisible(true);
+                        stmt.addItem(alterIndex);
+                        break;
+                    }
+
+                    MySqlAlterTableAlterFullTextIndex alterIndex = new MySqlAlterTableAlterFullTextIndex();
                     alterIndex.setIndexName(indexName);
 
                     accept(Token.SET);

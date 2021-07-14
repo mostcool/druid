@@ -812,6 +812,7 @@ public final class FnvHash {
         long MPP = fnv1a_64_lower("MPP");
         long SERDE = fnv1a_64_lower("SERDE");
         long SORT = fnv1a_64_lower("SORT");
+        long ZORDER = fnv1a_64_lower("ZORDER");
         long FIELDS = fnv1a_64_lower("FIELDS");
         long COLLECTION = fnv1a_64_lower("COLLECTION");
         long SKEWED = fnv1a_64_lower("SKEWED");
@@ -1119,5 +1120,9 @@ public final class FnvHash {
         long ASOF = fnv1a_64_lower("ASOF");
         long JSON_SET = fnv1a_64_lower("JSON_SET");
         long JSONB_SET = fnv1a_64_lower("JSONB_SET");
+
+        long TUNNEL = fnv1a_64_lower("TUNNEL");
+        long DOWNLOAD = fnv1a_64_lower("DOWNLOAD");
+        long UPLOAD = fnv1a_64_lower("UPLOAD");
     }
 }

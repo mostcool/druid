@@ -18,6 +18,7 @@ package com.alibaba.druid.sql.dialect.odps.parser;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.ast.*;
 import com.alibaba.druid.sql.ast.expr.*;
+import com.alibaba.druid.sql.ast.statement.SQLColumnDefinition;
 import com.alibaba.druid.sql.ast.statement.SQLExternalRecordFormat;
 import com.alibaba.druid.sql.ast.statement.SQLSelectItem;
 import com.alibaba.druid.sql.dialect.odps.ast.OdpsNewExpr;
@@ -27,6 +28,7 @@ import com.alibaba.druid.sql.parser.*;
 import com.alibaba.druid.util.FnvHash;
 
 import java.util.Arrays;
+import java.util.List;
 
 public class OdpsExprParser extends SQLExprParser {
     public final static String[] AGGREGATE_FUNCTIONS;
@@ -43,7 +45,8 @@ public class OdpsExprParser extends SQLExprParser {
                 "STDDEV", //
                 "SUM", //
                 "ROW_NUMBER",
-                "WM_CONCAT"//
+                "WM_CONCAT",
+                "COLLECT_LIST"//
         };
         AGGREGATE_FUNCTIONS_CODES = FnvHash.fnv1a_64_lower(strings, true);
         AGGREGATE_FUNCTIONS = new String[AGGREGATE_FUNCTIONS_CODES.length];
@@ -202,7 +205,25 @@ public class OdpsExprParser extends SQLExprParser {
 
             if (lexer.token() == Token.AS) {
                 lexer.nextToken();
-                this.exprList(transformExpr.getOutputColumns(), transformExpr);
+                List<SQLColumnDefinition> outputColumns = transformExpr.getOutputColumns();
+
+                if (lexer.token() == Token.LPAREN) {
+                    lexer.nextToken();
+                    for (; ; ) {
+                        SQLColumnDefinition column = this.parseColumn();
+                        outputColumns.add(column);
+                        if (lexer.token() == Token.COMMA) {
+                            lexer.nextToken();
+                            continue;
+                        }
+                        break;
+                    }
+                    accept(Token.RPAREN);
+                } else {
+                    SQLColumnDefinition column = new SQLColumnDefinition();
+                    column.setName(this.name());
+                    outputColumns.add(column);
+                }
             }
 
             if (lexer.identifierEquals(FnvHash.Constants.ROW)) {
@@ -219,9 +240,12 @@ public class OdpsExprParser extends SQLExprParser {
 
             OdpsNewExpr newExpr = new OdpsNewExpr();
             if (lexer.identifierEquals(FnvHash.Constants.GSON)
-                    || lexer.identifierEquals(GSONBUILDER)) {
+                    || lexer.identifierEquals(GSONBUILDER)
+                    || lexer.identifierEquals("STRING")
+            ) {
                 lexer.nextToken();
-                newExpr.setMethodName(lexer.stringVal());
+                String methodName = lexer.stringVal();
+                newExpr.setMethodName(methodName);
                 accept(Token.LPAREN);
                 this.exprList(newExpr.getArguments(), newExpr);
                 accept(Token.RPAREN);
